@@ -1,0 +1,64 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "(whitespace only)"
+msgstr ""
+
+msgid "Clipboard"
+msgstr ""
+
+msgid "Clear all"
+msgstr ""
+
+msgid "Nothing here yet"
+msgstr ""
+
+msgid "Items you copy will show up here."
+msgstr ""
+
+msgid "Unpin"
+msgstr ""
+
+msgid "Pin"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Shortcut"
+msgstr ""
+
+msgid "Opens the clipboard history"
+msgstr ""
+
+msgid "Disabled"
+msgstr ""
+
+msgid "Change…"
+msgstr ""
+
+msgid "Reset to Super+V"
+msgstr ""
+
+msgid "History size"
+msgstr ""
+
+msgid "Pinned items do not count toward the limit"
+msgstr ""
+
+msgid "Save images"
+msgstr ""
+
+msgid "Keep copied images in the history, not only text"
+msgstr ""
+
+msgid "New shortcut"
+msgstr ""
+
+msgid "Press the key combination to use. Esc cancels, Backspace disables the shortcut."
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+

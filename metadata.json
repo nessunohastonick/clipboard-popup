@@ -1,0 +1,10 @@
+{
+  "uuid": "clipboard-popup@claudiosaitta",
+  "name": "Clipboard Popup",
+  "description": "Windows-style clipboard history. Press Super+V to open a popup next to the pointer, pick an item and it is pasted into the window you were using.\n\n- Text and images, newest first; copying something again moves it to the top\n- Pin items to keep them; after a reboot only pinned items remain, like on Windows\n- History survives the screen lock\n- Keyboard: arrows, Enter to paste, Delete to remove, Esc to close\n- Pastes with Ctrl+Shift+V in terminals\n- Passwords copied from password managers (KeePassXC, Bitwarden) are not saved\n- Frees Super+V from the notification list while enabled and gives it back when disabled",
+  "shell-version": ["50"],
+  "url": "https://github.com/nessunohastonick/clipboard-popup",
+  "settings-schema": "org.gnome.shell.extensions.clipboard-popup",
+  "gettext-domain": "clipboard-popup@claudiosaitta",
+  "version-name": "1.0"
+}

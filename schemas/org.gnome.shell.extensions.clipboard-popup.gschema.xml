@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.clipboard-popup"
+          path="/org/gnome/shell/extensions/clipboard-popup/">
+    <key name="toggle-history" type="as">
+      <default><![CDATA[['<Super>v']]]></default>
+      <summary>Shortcut that opens the clipboard history</summary>
+    </key>
+    <key name="max-items" type="i">
+      <range min="5" max="100"/>
+      <default>25</default>
+      <summary>Maximum number of unpinned items</summary>
+    </key>
+    <key name="store-images" type="b">
+      <default>true</default>
+      <summary>Keep copied images in the history</summary>
+    </key>
+    <key name="freed-shell-shortcuts" type="as">
+      <default>[]</default>
+      <summary>Internal: shortcuts taken from the notification list, restored on disable</summary>
+    </key>
+  </schema>
+</schemalist>

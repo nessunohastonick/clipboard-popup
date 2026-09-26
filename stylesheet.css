@@ -1,0 +1,98 @@
+.cp-panel {
+  background-color: #2b2b2b;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: #f0f0f0;
+}
+
+.cp-header {
+  padding: 2px 4px 8px 6px;
+}
+
+.cp-title {
+  font-weight: bold;
+  font-size: 11pt;
+}
+
+.cp-clear {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 9pt;
+  color: -st-accent-color;
+}
+
+.cp-clear:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.cp-list {
+  spacing: 6px;
+  padding-right: 4px;
+}
+
+.cp-item {
+  background-color: #383838;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.cp-item:hover,
+.cp-item.cp-selected {
+  background-color: #444444;
+}
+
+.cp-item.cp-selected {
+  border-color: -st-accent-color;
+}
+
+.cp-body {
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.cp-text {
+  font-size: 10pt;
+  max-height: 80px;
+}
+
+.cp-image {
+  height: 110px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: left center;
+}
+
+.cp-side {
+  spacing: 2px;
+}
+
+.cp-icon-btn {
+  padding: 5px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cp-icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+}
+
+.cp-icon-btn.cp-pin-on {
+  color: -st-accent-color;
+}
+
+.cp-empty {
+  padding: 24px 12px;
+  spacing: 6px;
+  width: 340px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cp-empty-title {
+  font-weight: bold;
+  color: #f0f0f0;
+}

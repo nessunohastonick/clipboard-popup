@@ -1,0 +1,70 @@
+# Italian translation of Clipboard Popup.
+# SPDX-License-Identifier: GPL-2.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: clipboard-popup\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "(whitespace only)"
+msgstr "(solo spazi)"
+
+msgid "Clipboard"
+msgstr "Appunti"
+
+msgid "Clear all"
+msgstr "Cancella tutto"
+
+msgid "Nothing here yet"
+msgstr "Niente da visualizzare"
+
+msgid "Items you copy will show up here."
+msgstr "Qui compariranno gli elementi che copi."
+
+msgid "Unpin"
+msgstr "Rimuovi dai fissati"
+
+msgid "Pin"
+msgstr "Fissa"
+
+msgid "Delete"
+msgstr "Elimina"
+
+msgid "Shortcut"
+msgstr "Scorciatoia"
+
+msgid "Opens the clipboard history"
+msgstr "Apre la cronologia degli appunti"
+
+msgid "Disabled"
+msgstr "Disattivata"
+
+msgid "Change…"
+msgstr "Cambia…"
+
+msgid "Reset to Super+V"
+msgstr "Ripristina Super+V"
+
+msgid "History size"
+msgstr "Dimensione della cronologia"
+
+msgid "Pinned items do not count toward the limit"
+msgstr "Gli elementi fissati non contano nel limite"
+
+msgid "Save images"
+msgstr "Salva le immagini"
+
+msgid "Keep copied images in the history, not only text"
+msgstr "Conserva nella cronologia anche le immagini copiate, non solo il testo"
+
+msgid "New shortcut"
+msgstr "Nuova scorciatoia"
+
+msgid "Press the key combination to use. Esc cancels, Backspace disables the shortcut."
+msgstr "Premi la combinazione di tasti da usare. Esc annulla, Backspace disattiva la scorciatoia."
+
+msgid "Cancel"
+msgstr "Annulla"
