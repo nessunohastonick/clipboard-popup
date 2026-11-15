@@ -51,6 +51,13 @@ gnome-extensions install --force dist/clipboard-popup@claudiosaitta.shell-extens
 
 `build.sh` compiles the translations with Python, so gettext's `msgfmt` is not needed.
 
+### Tests
+
+```sh
+tests/run.sh    # functional tests in an isolated headless GNOME Shell (your session is not touched)
+tests/lint.sh   # Shexli, the analyzer extensions.gnome.org runs on uploads
+```
+
 ## Where data is stored
 
 | What | Where | Lifetime |

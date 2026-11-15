@@ -37,23 +37,65 @@ const SECRET_MIME = 'x-kde-passwordManagerHint';
 const TERMINALS = ['gnome-terminal', 'ptyxis', 'org.gnome.console', 'kgx', 'kitty', 'alacritty',
     'foot', 'ghostty', 'terminator', 'tilix', 'konsole', 'xterm', 'wezterm', 'blackbox'];
 
+Gio._promisify(Gio.File.prototype, 'load_contents_async');
+Gio._promisify(Gio.File.prototype, 'replace_contents_bytes_async', 'replace_contents_finish');
+Gio._promisify(Gio.File.prototype, 'query_info_async');
+Gio._promisify(Gio.File.prototype, 'enumerate_children_async');
+Gio._promisify(Gio.File.prototype, 'delete_async');
+Gio._promisify(Gio.FileEnumerator.prototype, 'next_files_async');
+Gio._promisify(Gio.FileEnumerator.prototype, 'close_async');
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function readJson(path) {
+// All file IO is asynchronous. Loading and saving the history go through one queue,
+// so a save started by disable() (screen lock) has finished before the next enable()
+// reads the file back, and two saves never interleave.
+let ioQueue = Promise.resolve();
+
+function logError(what, e) {
+    console.error(`clipboard-popup: ${what}: ${e.message}`);
+}
+
+function enqueue(task) {
+    ioQueue = ioQueue.then(task).catch(e => logError('file operation failed', e));
+    return ioQueue;
+}
+
+async function readBytes(path) {
+    const [contents] = await Gio.File.new_for_path(path).load_contents_async(null);
+    return contents;
+}
+
+function writeBytes(path, bytes) {
+    return Gio.File.new_for_path(path).replace_contents_bytes_async(
+        bytes instanceof GLib.Bytes ? bytes : new GLib.Bytes(bytes), null, false,
+        Gio.FileCreateFlags.PRIVATE | Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+}
+
+async function fileExists(path) {
     try {
-        const [ok, contents] = GLib.file_get_contents(path);
-        return ok ? JSON.parse(decoder.decode(contents)) : null;
+        await Gio.File.new_for_path(path).query_info_async('standard::type',
+            Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_DEFAULT, null);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function readJson(path) {
+    try {
+        return JSON.parse(decoder.decode(await readBytes(path)));
     } catch {
         return null;
     }
 }
 
-function writeJson(path, data) {
+async function writeJson(path, data) {
     try {
-        GLib.file_set_contents(path, encoder.encode(JSON.stringify(data)));
+        await writeBytes(path, encoder.encode(JSON.stringify(data)));
     } catch (e) {
-        console.error(`clipboard-popup: cannot write ${path}: ${e.message}`);
+        logError(`cannot write ${path}`, e);
     }
 }
 
@@ -79,17 +121,36 @@ class Store {
         this._pinnedFile = GLib.build_filenamev([this.dataDir, 'pinned.json']);
         this._saveId = 0;
         this._maxItems = maxItems;
+        // Images being written: the garbage collector must not take them for leftovers.
+        this._pendingImages = new Set();
+        this._destroyed = false;
         this.items = [];
         this.onChanged = null;
     }
 
     load() {
+        return enqueue(() => this._read());
+    }
+
+    async _read() {
         // Same session (e.g. after unlocking): full history.
         // New session: pinned items only, as Windows does after a reboot.
-        const items = readJson(this._sessionFile) ?? readJson(this._pinnedFile) ?? [];
-        this.items = items.filter(it =>
-            it && (it.type === 'text' ? typeof it.text === 'string'
-                : it.type === 'image' && GLib.file_test(it.file, GLib.FileTest.EXISTS)));
+        const saved = (await readJson(this._sessionFile)) ?? (await readJson(this._pinnedFile)) ?? [];
+        const loaded = [];
+        for (const it of Array.isArray(saved) ? saved : []) {
+            if (it?.type === 'text' && typeof it.text === 'string')
+                loaded.push(it);
+            else if (it?.type === 'image' && typeof it.file === 'string' && await fileExists(it.file))
+                loaded.push(it);
+        }
+        if (this._destroyed)
+            return;
+        // Whatever was copied while the file was being read goes on top, without duplicates.
+        const fresh = this.items;
+        this.items = [...fresh, ...loaded.filter(old => !fresh.some(it => it.type === old.type &&
+            (it.type === 'text' ? it.text === old.text : it.hash === old.hash)))];
+        this._trim();
+        this._changed();
     }
 
     set maxItems(value) {
@@ -113,18 +174,13 @@ class Store {
         const id = newId();
         const ext = mime.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'img';
         const path = GLib.build_filenamev([this.runDir, `${id}.${ext}`]);
-        Gio.File.new_for_path(path).replace_contents_bytes_async(bytes, null, false,
-            Gio.FileCreateFlags.PRIVATE | Gio.FileCreateFlags.REPLACE_DESTINATION, null,
-            (file, res) => {
-                try {
-                    file.replace_contents_finish(res);
-                } catch (e) {
-                    console.error(`clipboard-popup: cannot save image: ${e.message}`);
-                    return;
-                }
-                if (this.onChanged)
-                    this._insert(-1, () => ({id, type: 'image', file: path, mime, hash, pinned: false}));
-            });
+        this._pendingImages.add(path);
+        writeBytes(path, bytes).then(() => {
+            if (!this._destroyed)
+                this._insert(-1, () => ({id, type: 'image', file: path, mime, hash, pinned: false}));
+        }).catch(e => {
+            logError('cannot save image', e);
+        }).finally(() => this._pendingImages.delete(path));
     }
 
     _insert(existingIdx, make) {
@@ -177,48 +233,61 @@ class Store {
             GLib.source_remove(this._saveId);
             this._saveId = 0;
         }
+        return enqueue(() => this._write());
+    }
+
+    async _write() {
         // Pinned images must survive a reboot, so they move out of the tmpfs.
         for (const it of this.items) {
             if (it.type === 'image' && it.pinned && !it.file.startsWith(this.dataDir)) {
                 const dest = GLib.build_filenamev([this.dataDir, GLib.path_get_basename(it.file)]);
                 try {
-                    Gio.File.new_for_path(it.file).copy(Gio.File.new_for_path(dest),
-                        Gio.FileCopyFlags.OVERWRITE, null, null);
+                    await writeBytes(dest, await readBytes(it.file));
                     it.file = dest;
                 } catch (e) {
-                    console.error(`clipboard-popup: cannot copy pinned image: ${e.message}`);
+                    logError('cannot copy pinned image', e);
                 }
             }
         }
-        writeJson(this._sessionFile, this.items);
-        writeJson(this._pinnedFile, this.items.filter(it => it.pinned));
-        this._collectGarbage();
+        const items = this.items;
+        await writeJson(this._sessionFile, items);
+        await writeJson(this._pinnedFile, items.filter(it => it.pinned));
+        await this._collectGarbage();
     }
 
-    _collectGarbage() {
-        const used = new Set(this.items.filter(it => it.type === 'image').map(it => it.file));
+    async _collectGarbage() {
         for (const dir of [this.runDir, this.dataDir]) {
-            let en;
+            let names = [];
             try {
-                en = Gio.File.new_for_path(dir).enumerate_children('standard::name',
-                    Gio.FileQueryInfoFlags.NONE, null);
+                const en = await Gio.File.new_for_path(dir).enumerate_children_async('standard::name',
+                    Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_DEFAULT, null);
+                for (let batch; (batch = await en.next_files_async(100, GLib.PRIORITY_DEFAULT, null)).length;)
+                    names.push(...batch.map(info => info.get_name()));
+                await en.close_async(GLib.PRIORITY_DEFAULT, null);
             } catch {
                 continue;
             }
-            for (let info; (info = en.next_file(null));) {
-                const name = info.get_name();
+            // Only images created here (id.extension): anything else is not ours.
+            names = names.filter(name => /^[a-z0-9]+\.[a-z0-9]+$/.test(name) && !name.endsWith('.json'));
+            for (const name of names) {
                 const path = GLib.build_filenamev([dir, name]);
-                // Only images created here (id.extension): anything else is not ours.
-                if (/^[a-z0-9]+\.[a-z0-9]+$/.test(name) && !name.endsWith('.json') && !used.has(path))
-                    GLib.unlink(path);
+                // Checked now and not before the listing: the history may have changed meanwhile.
+                if (this._pendingImages.has(path) || this.items.some(it => it.file === path))
+                    continue;
+                try {
+                    await Gio.File.new_for_path(path).delete_async(GLib.PRIORITY_DEFAULT, null);
+                } catch (e) {
+                    logError(`cannot remove ${path}`, e);
+                }
             }
-            en.close(null);
         }
     }
 
     destroy() {
-        this.save();
+        // The last save finishes in the background; the next enable() waits for it.
+        this._destroyed = true;
         this.onChanged = null;
+        this.save();
     }
 }
 
@@ -231,8 +300,10 @@ class HistoryPopup {
 
         this._backdrop = new St.Widget({reactive: true, x: 0, y: 0,
             width: global.stage.width, height: global.stage.height});
-        this._backdrop.connect('key-press-event', (_a, ev) => this._onKey(ev));
-        this._backdrop.connect('button-press-event', (_a, ev) => this._onBackdropPress(ev));
+        this._backdropIds = [
+            this._backdrop.connect('key-press-event', (_a, ev) => this._onKey(ev)),
+            this._backdrop.connect('button-press-event', (_a, ev) => this._onBackdropPress(ev)),
+        ];
 
         this._panel = new St.BoxLayout({style_class: 'cp-panel', reactive: true,
             orientation: Clutter.Orientation.VERTICAL});
@@ -411,7 +482,18 @@ class HistoryPopup {
             Main.popModal(this._grab);
             this._grab = null;
         }
+        this._backdropIds.forEach(id => this._backdrop.disconnect(id));
+        this._backdropIds = null;
+        this._list.destroy();
+        this._scroll.destroy();
+        this._panel.destroy();
         this._backdrop.destroy();
+        this._backdrop = null;
+        this._panel = null;
+        this._scroll = null;
+        this._list = null;
+        this._rows = [];
+        this._ext = null;
     }
 }
 
@@ -426,6 +508,10 @@ export default class ClipboardPopupExtension extends Extension {
         this._popup = null;
         this._pasteId = 0;
         this._clipboard = St.Clipboard.get_default();
+        // Created now and not at the first paste: Mutter drops the events a virtual device
+        // sends before it has finished registering it, and that first Ctrl+V would be lost.
+        this._keyboard = Clutter.get_default_backend().get_default_seat()
+            .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
 
         this._selection = global.display.get_selection();
         this._ownerId = this._selection.connect('owner-changed',
@@ -454,6 +540,7 @@ export default class ClipboardPopupExtension extends Extension {
         this._settingsIds.forEach(id => this._settings.disconnect(id));
         this._settingsIds = null;
         this._selection.disconnect(this._ownerId);
+        this._ownerId = 0;
         this.closePopup();
         if (this._pasteId) {
             GLib.source_remove(this._pasteId);
@@ -536,16 +623,21 @@ export default class ClipboardPopupExtension extends Extension {
         this.closePopup();
         if (item.type === 'text') {
             this._clipboard.set_text(St.ClipboardType.CLIPBOARD, item.text);
-        } else {
-            try {
-                const [, contents] = GLib.file_get_contents(item.file);
-                this._clipboard.set_content(St.ClipboardType.CLIPBOARD, item.mime,
-                    new GLib.Bytes(contents));
-            } catch (e) {
-                console.error(`clipboard-popup: cannot read image: ${e.message}`);
-                return;
-            }
+            this._schedulePaste();
+            return;
         }
+        readBytes(item.file).then(contents => {
+            // The extension may have been disabled while the file was being read.
+            if (!this._clipboard)
+                return;
+            this._clipboard.set_content(St.ClipboardType.CLIPBOARD, item.mime, new GLib.Bytes(contents));
+            this._schedulePaste();
+        }).catch(e => {
+            logError('cannot read image', e);
+        });
+    }
+
+    _schedulePaste() {
         // Give the window time to get its focus back before sending it Ctrl+V.
         if (this._pasteId)
             GLib.source_remove(this._pasteId);
@@ -559,8 +651,6 @@ export default class ClipboardPopupExtension extends Extension {
     _sendPasteKeys() {
         const wmClass = (global.display.focus_window?.get_wm_class() ?? '').toLowerCase();
         const terminal = TERMINALS.some(t => wmClass.includes(t));
-        this._keyboard ??= Clutter.get_default_backend().get_default_seat()
-            .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
         const keys = terminal
             ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L, Clutter.KEY_v]
             : [Clutter.KEY_Control_L, Clutter.KEY_v];
